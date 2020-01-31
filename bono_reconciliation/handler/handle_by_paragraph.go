@@ -46,6 +46,10 @@ const (
     ** sap制单人
     */
     sap_prepared_by_index int = 8
+    /*
+    ** sap凭证
+    */
+    sap_cert_id_index int = 5
     sap_col_max int = 13
 )
 
@@ -64,6 +68,7 @@ type CSapData struct {
     lenderValue float64
     printNo int64
     preparedby string
+    certId string
 }
 
 /*
@@ -74,13 +79,11 @@ type CByParagraph struct {
     sapPath string
 }
 
-func (self *CByParagraph) writeXlsx(fileName string, sheetName string, header *[]string, rows *[]*[]string) error {
-    var file *xlsx.File
+func (self *CByParagraph) writeXlsx(file *xlsx.File, sheetName string, header *[]string, rows *[]*[]string) error {
     var sheet *xlsx.Sheet
     var row *xlsx.Row
     var cell *xlsx.Cell
     var err error
-    file = xlsx.NewFile()
     sheet, err = file.AddSheet(sheetName)
     if err != nil {
         return err
@@ -100,10 +103,12 @@ func (self *CByParagraph) writeXlsx(fileName string, sheetName string, header *[
             cell.Value = c
         }
     }
-    err = file.Save(fileName)
-    if err != nil {
-        return err
-    }
+    // var file *xlsx.File
+    // file = xlsx.NewFile()
+    // err = file.Save(fileName)
+    // if err != nil {
+    //     return err
+    // }
     return nil
 }
 
@@ -119,54 +124,69 @@ func (self *CByParagraph) Calc() error {
     /*
     ** key: 银行借方
     */
-    bankDebitMap := map[float64]*[]CBankData{}
+    bankLenderMap := map[float64]*[]CBankData{}
     for _, bank := range *bankData {
-        if bank.debitValue == 0 || (bank.debitValue != 0 && bank.lenderValue != 0) {
+        if bank.lenderValue == 0 || (bank.debitValue != 0 && bank.lenderValue != 0) {
             continue
         }
-        if v, ok := bankDebitMap[bank.debitKey]; ok {
+        if v, ok := bankLenderMap[bank.lenderKey]; ok {
             *v = append(*v, bank)
         } else {
             vec := []CBankData{
                 bank,
             }
-            bankDebitMap[bank.debitKey] = &vec
+            bankLenderMap[bank.lenderKey] = &vec
         }
     }
-    sapLenderMap := map[float64]*[]CSapData{}
+    sapDebitMap := map[float64]*[]CSapData{}
     for _, sap := range *sapData {
-        if sap.lenderValue == 0 || (sap.debitValue != 0 && sap.lenderValue != 0) {
+        if sap.debitValue == 0 || (sap.debitValue != 0 && sap.lenderValue != 0) {
             continue
         }
-        if v, ok := sapLenderMap[sap.lenderKey]; ok {
+        if v, ok := sapDebitMap[sap.debitKey]; ok {
             *v = append(*v, sap)
         } else {
             vec := []CSapData{
                 sap,
             }
-            sapLenderMap[sap.lenderKey] = &vec
+            sapDebitMap[sap.debitKey] = &vec
         }
     }
-    // fmt.Println(sapLenderMap)
+    // fmt.Println(sapDebitMap)
     /*
     ** 遍历银行借方, 查找sap贷方是否存在
     */
-    bankDebitExistSapLenderNotexist := []*[]string{}
-    bankDebitExistSapLenderNotexistHeader := []string{
+    bankExistSapNotexist := []*[]string{}
+    bankExistSapNotexistHeader := []string{
         "借方", "贷方", "序号",
     }
     for _, bank := range *bankData {
         if bank.debitValue == 0 {
             continue
         }
-        if _, ok := sapLenderMap[bank.debitKey]; ok {
+        if v, ok := sapDebitMap[bank.debitKey]; ok {
             /*
             ** 银行借方 和 sap贷方都存在
             */
             /*
             ** 从sapLenderMap中删除都有的, 则剩下的就是sap有的, 但是银行没有的
+            ** 1. 当vec为空时, 从map中移除
             */
-            delete(sapLenderMap, bank.debitKey)
+            if len(*v) == 0 {
+                delete(sapDebitMap, bank.debitKey)
+                continue
+            }
+            *v = (*v)[1:]
+            /*
+            for i, va := range *v {
+                if v.certId == va.certId {
+                    v2 := (*v)[i+1:]
+                    *v = (*v)[0:i]
+                    *v = append(*v, v2)
+                    break
+                }
+            }
+            */
         } else {
             /*
             ** 银行借方存在, sap贷方不存在
@@ -177,7 +197,7 @@ func (self *CByParagraph) Calc() error {
                 strconv.FormatFloat(bank.lenderValue, 'f', 2, 64),
                 bank.no,
             }
-            bankDebitExistSapLenderNotexist = append(bankDebitExistSapLenderNotexist, &vs)
+            bankExistSapNotexist = append(bankExistSapNotexist, &vs)
         }
     }
     // fmt.Println("-----------sap贷方存在, 但是银行借方不存在-----------")
@@ -186,11 +206,11 @@ func (self *CByParagraph) Calc() error {
         return err
     }
     // defer f.Close()
-    sapLenderExistBankDebitNotexistHeader := []string{
+    sapExistBankNotexistHeader := []string{
         "借方", "贷方", "打印序号", "制单人编号",
     }
-    sapLenderExistBankDebitNotexist := []*[]string{}
-    for _, value := range sapLenderMap {
+    sapExistBankNotexist := []*[]string{}
+    for _, value := range sapDebitMap {
         /*
         ** sap贷方存在, 银行借方不存在
         */
@@ -199,47 +219,51 @@ func (self *CByParagraph) Calc() error {
             // fmt.Println(key, s)
             // f.Write([]byte(s))
             vs := []string{
-                strconv.FormatFloat(v.debitValue, 'f', 2, 64),
                 strconv.FormatFloat(v.lenderValue, 'f', 2, 64),
+                strconv.FormatFloat(v.debitValue, 'f', 2, 64),
                 strconv.FormatInt(int64(v.printNo), 10),
                 v.preparedby,
             }
-            sapLenderExistBankDebitNotexist = append(sapLenderExistBankDebitNotexist, &vs)
+            sapExistBankNotexist = append(sapExistBankNotexist, &vs)
         }
     }
-    self.writeXlsx("sap贷方存在_银行借方不存在.xlsx", "sheet1", &sapLenderExistBankDebitNotexistHeader, &sapLenderExistBankDebitNotexist)
-    self.writeXlsx("银行借方存在_sap贷方不存在.xlsx", "sheet1", &bankDebitExistSapLenderNotexistHeader, &bankDebitExistSapLenderNotexist)
+    // self.writeXlsx("sap存在_银行不存在.xlsx", "sheet1", &sapLenderExistBankDebitNotexistHeader, &sapLenderExistBankDebitNotexist)
+    // self.writeXlsx("银行存在_sap不存在.xlsx", "sheet1", &bankExistSapNotexistHeader, &bankExistSapNotexist)
     /*
     ** 遍历sap, 查找银行是否存在
     */
-    bankLenderExistSapDebitNotexist := []*[]string{}
-    bankLenderExistSapDebitNotexistHeader := []string{
-        "借方", "贷方", "打印序号", "制单人编号",
-    }
+    // bankLenderExistSapDebitNotexist := []*[]string{}
+    // bankLenderExistSapDebitNotexistHeader := []string{
+    //     "借方", "贷方", "打印序号", "制单人编号",
+    // }
     for _, sap := range *sapData {
         if sap.lenderValue == 0 {
             continue
         }
-        if _, ok := bankDebitMap[sap.lenderKey]; ok {
+        if v, ok := bankLenderMap[sap.lenderKey]; ok {
             /*
             ** 银行贷方 和 sap借方都存在
             */
             /*
             ** 从bankDebitMap中删除都有的, 则剩下的就是sap有的, 但是银行没有的
             */
-            delete(bankDebitMap, sap.lenderKey)
+            if len(*v) == 0 {
+                delete(bankLenderMap, sap.lenderKey)
+                continue
+            }
+            *v = (*v)[1:]
         } else {
             /*
             ** 银行贷方存在, sap借方不存在
             */
             // fmt.Println("银行借方存在, 但是sap贷方不存在:", bank)
             vs := []string{
-                strconv.FormatFloat(sap.debitValue, 'f', 2, 64),
                 strconv.FormatFloat(sap.lenderValue, 'f', 2, 64),
+                strconv.FormatFloat(sap.debitValue, 'f', 2, 64),
                 strconv.FormatInt(int64(sap.printNo), 10),
                 sap.preparedby,
             }
-            bankLenderExistSapDebitNotexist = append(bankLenderExistSapDebitNotexist, &vs)
+            sapExistBankNotexist = append(sapExistBankNotexist, &vs)
         }
     }
     // fmt.Println("-----------sap贷方存在, 但是银行借方不存在-----------")
@@ -248,11 +272,11 @@ func (self *CByParagraph) Calc() error {
         return err
     }
     // defer f.Close()
-    sapDebitExistBankLenderNotexistHeader := []string{
-        "借方", "贷方", "序号",
-    }
-    sapDebitExistBankLenderNotexist := []*[]string{}
-    for _, value := range bankDebitMap {
+    // sapDebitExistBankLenderNotexistHeader := []string{
+    //     "借方", "贷方", "序号",
+    // }
+    // sapDebitExistBankLenderNotexist := []*[]string{}
+    for _, value := range bankLenderMap {
         /*
         ** sap贷方存在, 银行借方不存在
         */
@@ -265,11 +289,19 @@ func (self *CByParagraph) Calc() error {
                 strconv.FormatFloat(v.lenderValue, 'f', 2, 64),
                 v.no,
             }
-            sapDebitExistBankLenderNotexist = append(sapDebitExistBankLenderNotexist, &vs)
+            bankExistSapNotexist = append(bankExistSapNotexist, &vs)
         }
     }
-    self.writeXlsx("sap借方存在_银行贷方不存在.xlsx", "sheet1", &sapDebitExistBankLenderNotexistHeader, &sapDebitExistBankLenderNotexist)
-    self.writeXlsx("银行贷方存在_sap借方不存在.xlsx", "sheet1", &bankLenderExistSapDebitNotexistHeader, &bankLenderExistSapDebitNotexist)
+    // self.writeXlsx("银行存在_sap不存在.xlsx", "sheet1", &bankExistSapNotexistHeader, &bankExistSapNotexist)
+    // self.writeXlsx("sap存在_银行不存在.xlsx", "sheet1", &sapExistBankNotexistHeader, &sapExistBankNotexist)
+    var file *xlsx.File
+    file = xlsx.NewFile()
+    self.writeXlsx(file, "银行存在, sap不存在", &bankExistSapNotexistHeader, &bankExistSapNotexist)
+    self.writeXlsx(file, "sap存在, 银行不存在", &sapExistBankNotexistHeader, &sapExistBankNotexist)
+    err = file.Save("resource/output.xlsx")
+    if err != nil {
+        return err
+    }
     return nil
 }
 
@@ -322,9 +354,6 @@ func (self *CByParagraph) readBankData() (*[]CBankData, error) {
             lenderKey = -lenderKey
         }
         bankNo := cells[bank_no].String()
-        if lender < 0 || debit < 0 {
-            log.Println(lender, debit)
-        }
         datas = append(datas, CBankData{
             debitKey: debitKey,
             debitValue: debit,
@@ -390,17 +419,16 @@ func (self *CByParagraph) readSapData() (*[]CSapData, error) {
             log.Println(err)
             continue
         }
-        if lender < 0 || debit < 0 {
-            log.Println(lender, debit)
-        }
         preparedby := cells[sap_prepared_by_index].String()
+        certId := cells[sap_cert_id_index].String()
         datas = append(datas, CSapData{
-            debitKey: debitKey,
-            debitValue: debit,
-            lenderKey: lenderKey,
-            lenderValue: lender,
+            debitKey: lenderKey,
+            debitValue: lender,
+            lenderKey: debitKey,
+            lenderValue: debit,
             printNo: printNo,
             preparedby: preparedby,
+            certId: certId,
         })
     }
     return &datas, nil
