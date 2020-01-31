@@ -103,11 +103,11 @@ func (self *CStaffInsfrastructure) Get() error {
     headers := []string{
         "房间号", "姓名", "住址", "性别",
     }
-    err = self.writeXlsx(file, *self.projectName, &headers, &rows)
+    err = self.writeXlsx(file, "sheet", &headers, &rows)
     if err != nil {
         return err
     }
-    file.Save("result.xlsx")
+    file.Save(*self.projectName+".xlsx")
     return nil
 }
 

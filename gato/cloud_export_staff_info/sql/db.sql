@@ -33,3 +33,5 @@ on sir.staffUuid = si.staffUuid;
 #define getInfrastructureInfoByUuid
 select infrastructureName, parentUuid from t_vss_infrastructure_info where infrastructureUuid = {0};
 #end
+
+select infrastructureName, parentUuid from t_vss_infrastructure_info where infrastructureUuid = 'c52359de1b2d44728ec6fcd75d9c70b6';
