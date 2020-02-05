@@ -15,6 +15,10 @@ type CGetAllStaffInfoOutput struct {
 	NativePlaceIsValid bool
 	Gender string
 	GenderIsValid bool
+	ContactType string
+	ContactTypeIsValid bool
+	ContactInfo string
+	ContactInfoIsValid bool
 }
 
 type CGetInfrastructureInfoByUuidInput struct {

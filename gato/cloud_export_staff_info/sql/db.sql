@@ -12,13 +12,23 @@
     @out nationality: string
     @out nativePlace: string
     @out gender: string
+    @out contactType: string
+    @out contactInfo: string
 */
 #define getAllStaffInfo
-select sir.infrastructureUuid
+select tmp.infrastructureUuid
+, tmp.staffName, tmp.address, tmp.nation, tmp.nationality, tmp.nativePlace, tmp.gender
+, sc.contactType, sc.contactInfo
+from
+(
+select si.staffUuid as suid, sir.infrastructureUuid
 , si.staffName, si.address, si.nation, si.nationality, si.nativePlace, si.gender
 from t_vss_staff_infrastructure_rl as sir
 inner join t_vss_staff_info as si
-on sir.staffUuid = si.staffUuid;
+on sir.staffUuid = si.staffUuid
+) as tmp
+left join t_vss_staff_contact as sc
+on tmp.suid = sc.staffUuid;
 #end
 
 /*

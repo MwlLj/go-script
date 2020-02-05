@@ -123,11 +123,19 @@ func (this *CDbHandler) GetAllStaffInfo(output0 *[]CGetAllStaffInfoOutput) (erro
 	var result sql.Result
 	var _ = result
 	var _ error = err
-	rows0, err := tx.Query(fmt.Sprintf(`select sir.infrastructureUuid
+	rows0, err := tx.Query(fmt.Sprintf(`select tmp.infrastructureUuid
+, tmp.staffName, tmp.address, tmp.nation, tmp.nationality, tmp.nativePlace, tmp.gender
+, sc.contactType, sc.contactInfo
+from
+(
+select si.staffUuid as suid, sir.infrastructureUuid
 , si.staffName, si.address, si.nation, si.nationality, si.nativePlace, si.gender
 from t_vss_staff_infrastructure_rl as sir
 inner join t_vss_staff_info as si
-on sir.staffUuid = si.staffUuid;`))
+on sir.staffUuid = si.staffUuid
+) as tmp
+left join t_vss_staff_contact as sc
+on tmp.suid = sc.staffUuid;`))
 	if err != nil {
 		tx.Rollback()
 		return err, rowCount
@@ -143,7 +151,9 @@ on sir.staffUuid = si.staffUuid;`))
 		var nationality sql.NullString
 		var nativePlace sql.NullString
 		var gender sql.NullString
-		scanErr := rows0.Scan(&infrastructureUuid, &staffName, &address, &nation, &nationality, &nativePlace, &gender)
+		var contactType sql.NullString
+		var contactInfo sql.NullString
+		scanErr := rows0.Scan(&infrastructureUuid, &staffName, &address, &nation, &nationality, &nativePlace, &gender, &contactType, &contactInfo)
 		if scanErr != nil {
 			continue
 		}
@@ -161,6 +171,10 @@ on sir.staffUuid = si.staffUuid;`))
 		tmp.NativePlaceIsValid = nativePlace.Valid
 		tmp.Gender = gender.String
 		tmp.GenderIsValid = gender.Valid
+		tmp.ContactType = contactType.String
+		tmp.ContactTypeIsValid = contactType.Valid
+		tmp.ContactInfo = contactInfo.String
+		tmp.ContactInfoIsValid = contactInfo.Valid
 		*output0 = append(*output0, tmp)
 	}
 	tx.Commit()
