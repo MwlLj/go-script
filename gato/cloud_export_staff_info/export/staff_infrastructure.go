@@ -97,11 +97,11 @@ func (self *CStaffInsfrastructure) Get() error {
             return err
         }
         rows = append(rows, &[]string{
-            full, item.StaffName, item.Address, item.Gender, item.ContactType, item.ContactInfo,
+            full, item.StaffName, item.Address, item.Gender, item.ContactInfo,
         })
     }
     headers := []string{
-        "房间号", "姓名", "住址", "性别", "联系类型", "联系信息",
+        "房间号", "姓名", "住址", "性别", "联系信息",
     }
     err = self.writeXlsx(file, "sheet", &headers, &rows)
     if err != nil {

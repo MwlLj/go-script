@@ -28,7 +28,8 @@ inner join t_vss_staff_info as si
 on sir.staffUuid = si.staffUuid
 ) as tmp
 left join t_vss_staff_contact as sc
-on tmp.suid = sc.staffUuid;
+on tmp.suid = sc.staffUuid
+where sc.contactType = 'cellphone';
 #end
 
 /*
